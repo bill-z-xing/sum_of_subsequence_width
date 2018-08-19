@@ -62,260 +62,6 @@ private:
     std::string m_name;
 };
 
-class Factorials
-{
-public:
-
-    Factorials()
-    {
-        m_lookup.reserve(1024);
-        m_lookup.push_back(1); // By definition, 0's factorial is 1
-    }
-
-    long get(long a)
-    {
-        assert(a >= 0);
-
-        grow_if_necessary(a);
-        return m_lookup[a];
-    }
-
-private:
-    void grow_if_necessary(long a)
-    {
-        long old_size = static_cast<long>(m_lookup.size());
-        if (a >= old_size)
-        {
-            m_lookup.resize(a + 1);
-
-            for (long i = old_size; i <= a; ++i)
-            {
-                m_lookup[i] = (m_lookup[i - 1] * i);
-            }
-        }
-    }
-
-    std::vector<long> m_lookup;
-};
-
-
-static Factorials s_factorials;
-
-
-long n_choose_k(long n, long k)
-{
-    assert(n >= 0);
-    assert(k >= 0);
-
-    return s_factorials.get(n) / s_factorials.get(k) / s_factorials.get(n - k);
-}
-
-// Condition: Must only be used for the same base throughout!!
-// The class itself does not know it's base, caller does.
-class MyPowCacheForBase
-{
-    static constexpr int kInvalid = -1;
-
-public:
-
-
-    int lookup_or_compute_and_memorize(int base, int exp)
-    {
-        #ifdef PROFILE
-            Profiler p( "MyPowCacheForBase: Compute " + std::to_string(base) + " ^ " + std::to_string(exp) );
-        #endif
-
-        assert(exp >= 0);
-
-        grow_if_necessary(exp);
-
-        int result = m_result_by_exp[exp];
-        if (result == kInvalid)
-        {
-            // Recursively compute the result until finding a valid one from the cache
-            if (exp == 0)
-            {
-                result = 1;
-            }
-            else if (exp == 1)
-            {
-                result = base;
-            }
-            else
-            {
-                int half_exp = exp / 2;
-                int left_over_exp = exp - half_exp - half_exp;
-
-                int half_exp_result = lookup_or_compute_and_memorize(base, half_exp);
-                int left_over_exp_result = lookup_or_compute_and_memorize(base, left_over_exp);
-
-                result = half_exp_result * half_exp_result * left_over_exp_result;
-            }
-
-            m_result_by_exp[exp] = result;
-        }
-
-        #ifdef DEBUG
-            std::cout << base << "^" << exp << "=" << result << std::endl;
-        #endif
-
-        return result;
-    }
-
-private:
-
-    void grow_if_necessary(int exp)
-    {
-        if (exp >= static_cast<int>(m_result_by_exp.size()))
-        {
-            m_result_by_exp.resize(exp + 1, kInvalid);
-        }
-    }
-
-    std::vector<int> m_result_by_exp;
-};
-
-constexpr int MyPowCacheForBase::kInvalid;
-
-class MyPowCache
-{
-public:
-
-    int lookup_or_compute_and_memorize(int base, int exp)
-    {
-        #ifdef PROFILE
-            Profiler p( "MyPowCache: Compute " + std::to_string(base) + " ^ " + std::to_string(exp) );
-        #endif
-
-        assert(base >= 0);
-
-        grow_if_necessary(base);
-        return m_caches_by_base[base].lookup_or_compute_and_memorize(base, exp);
-    }
-
-private:
-
-    void grow_if_necessary(int base)
-    {
-        if (base >= static_cast<int>(m_caches_by_base.size()))
-        {
-            m_caches_by_base.resize(base + 1);
-        }
-    }
-
-    std::vector<MyPowCacheForBase> m_caches_by_base;
-};
-
-static MyPowCache s_pow_cache;
-
-class BigProduct
-{
-public:
-
-
-    BigProduct & operator*=(int other)
-    {
-        assert(other >= 0);
-
-        grow_to_base_if_necessary(other);
-        ++m_indices[other];
-
-        return *this;
-    }
-
-    BigProduct & operator/=(int other)
-    {
-        assert(other >= 0);
-
-        grow_to_base_if_necessary(other);
-        --m_indices[other];
-
-        return *this;
-    }
-
-    void clear()
-    {
-        m_indices.clear();
-    }
-
-    int to_int()
-    {
-        #ifdef PROFILE
-            Profiler p( "BigProduct::to_int" );
-        #endif
-
-        double accumulator = 1;
-
-        for (int base = 0; base < static_cast<int>(m_indices.size()); ++base)
-        {
-            int exp = m_indices[base];
-            if (exp > 0)
-            {
-                accumulator *= s_pow_cache.lookup_or_compute_and_memorize(base, exp);
-            }
-        }
-
-        for (int base = 0; base < static_cast<int>(m_indices.size()); ++base)
-        {
-            int exp = m_indices[base];
-
-            if (exp < 0)
-            {
-                accumulator /= s_pow_cache.lookup_or_compute_and_memorize(base, -exp);
-            }
-        }
-
-        return accumulator;
-    }
-
-private:
-
-    void grow_to_base_if_necessary(int base)
-    {
-        assert(base >= 0);
-        if (base >= static_cast<int>(m_indices.size()))
-        {
-            m_indices.resize(base + 1);
-        }
-    }
-
-    std::vector<int> m_indices;
-};
-
-
-
-int n_choose_k(int n, int k)
-{
-    #ifdef PROFILE
-        Profiler p( std::to_string(n) + " choose " + std::to_string(k) );
-    #endif
-
-    assert(n >= 0);
-    assert(k >= 0);
-
-    static BigProduct s_big_product; // reuse the allocated memory...
-    s_big_product.clear(); // ...but don't reuse the content
-
-    for (int i = n; i > (n - k); --i)
-    {
-        s_big_product *= i;
-    }
-
-    for (int i = k; i > 0; --i)
-    {
-        s_big_product /= i;
-    }
-
-    int result = s_big_product.to_int();
-
-    s_big_product.clear();
-
-    #ifdef DEBUG
-        std::cout << n << " C " << k << " = " << result << std::endl;
-    #endif
-
-    return result;
-}
 
 class ModuloOfPowerOfTwoCache
 {
@@ -357,45 +103,6 @@ private:
 
 static ModuloOfPowerOfTwoCache s_modulo_of_power_of_two_cache;
 
-int compute_num_occurences(int ihead, int itail)
-{
-    #ifdef PROFILE
-        Profiler p("compute_num_occurences");
-    #endif
-
-    assert(ihead < itail);
-
-    int n = itail - ihead - 1;
-
-    #if 0
-        // Old inefficient method that's prone to overflow
-        int count = 0;
-        for (int k = 0; k <= n; ++k)
-        {
-            count = (count + n_choose_k(n, k));
-        }
-        #ifdef DEBUG
-            std::cout << "num_occurences=" << count << std::endl;
-        #endif
-    #else
-        // New method, after realization that
-        //   for (k in [0, N]) { result += N choose k }
-        // is equal to:
-        //   2 ^ N
-        // or to prevent overflow: 2 ^ N % kModulo
-        // We use ModuloOfPowerOfTwoCache to perform the incremental modulo without overflowing
-
-        int count = s_modulo_of_power_of_two_cache.compute_or_get_remainder(n);
-
-        #ifdef DEBUG
-            std::cout << "2 ^ " << n << " % " << kModulo << " = " << count << std::endl;
-        #endif
-    #endif
-
-
-
-    return count;
-}
 
 class Solution {
 public:
@@ -403,53 +110,23 @@ public:
     {
         Profiler p("sumSubseqWidths");
 
+        std::sort(A.begin(), A.end());
+
         long sum_of_widths = 0;
 
+        // Improved. No need to compute the difference for every pair. Scan through array once only.
+        const int length = static_cast<int>(A.size());
+        for (int i = 0; i < length; ++i)
         {
-            #ifdef PROFILE
-                Profiler p("Sort");
-            #endif
-            std::sort(A.begin(), A.end());
+            int val = A[i];
+
+            long minus_count = s_modulo_of_power_of_two_cache.compute_or_get_remainder(length - i - 1) - 1;
+            long plus_count = s_modulo_of_power_of_two_cache.compute_or_get_remainder(i - 0) - 1;
+
+            long elem = (val * plus_count) - (val * minus_count);
+
+            sum_of_widths = (sum_of_widths + elem) % static_cast<long>(kModulo);
         }
-
-        #if 0
-            // Old inefficient method (quadratic)
-            for (int i = 0; i < static_cast<int>(A.size()) - 1; ++i)
-            {
-                for (int j = i + 1; j < static_cast<int>(A.size()); ++j)
-                {
-                    int min = A[i];
-                    int max = A[j];
-                    assert(min <= max);
-                    long w = max - min;
-
-                    #ifdef DEBUG
-                        std::cout << "A" << i << "=" << min << ", A" << j << "=" << max << ", w=" << w << std::endl;
-                    #endif
-
-                    long occurences = compute_num_occurences(i, j);
-
-                    long product = (w * occurences);
-
-                    sum_of_widths = (sum_of_widths + product) % static_cast<long>(kModulo);
-                }
-            }
-        #else
-            // Improved. No need to compute the difference for every pair. Scan through array once only.
-            const int length = static_cast<int>(A.size());
-            for (int i = 0; i < length; ++i)
-            {
-                int val = A[i];
-
-                long minus_count = s_modulo_of_power_of_two_cache.compute_or_get_remainder(length - i - 1) - 1;
-                long plus_count = s_modulo_of_power_of_two_cache.compute_or_get_remainder(i - 0) - 1;
-
-                long elem = (val * plus_count) - (val * minus_count);
-
-                sum_of_widths = (sum_of_widths + elem) % static_cast<long>(kModulo);
-            }
-
-        #endif
 
         return sum_of_widths;
     }
