@@ -13,10 +13,6 @@
 
 static constexpr int kModulo = 1'000'000'007;
 
-//#define DEBUG
-//#define PROFILE
-
-
 namespace ProfilerDetails
 {
     inline auto now()
@@ -85,10 +81,6 @@ private:
 
         if (exp >= old_size)
         {
-            #ifdef PROFILE
-                Profiler p("ModuloOfPowerOfTwoCache::grow_if_necessary");
-            #endif
-
             m_remainders_by_exp.resize(exp + 1);
 
             for (int i = old_size; i < static_cast<int>(m_remainders_by_exp.size()); ++i)
